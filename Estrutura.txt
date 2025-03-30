@@ -1,0 +1,44 @@
+/meu-projeto-rag-modular
+├── README.md                # Documentação geral do projeto
+├── requirements.txt         # Dependências do Python
+├── setup.py                 # (Opcional) Configuração para instalação como pacote
+├── .gitignore               # Arquivo para ignorar arquivos e pastas indesejadas
+│
+├── src/                     # Código fonte da API e dos módulos da RAG
+│   ├── __init__.py
+│   ├── main.py              # Ponto de entrada da API (FastAPI)
+│   ├── config.py            # Configurações do projeto (e.g., parâmetros de conexão do banco, etc.)
+│   ├── routes/              # Módulo para definir as rotas da API
+│   │   ├── __init__.py
+│   │   └── rag_routes.py    # Endpoints específicos da RAG
+│   ├── modules/             # Implementações dos módulos da RAG (indexação, recuperação, etc.)
+│   │   ├── __init__.py
+│   │   ├── pre_retrieval.py
+│   │   ├── retrieval.py
+│   │   ├── post_retrieval.py
+│   │   ├── generation.py
+│   │   ├── orchestration.py
+│   │   └── feedback.py     # Módulo de avaliação/feedback
+│   ├── utils/               # Funções utilitárias (ex.: conexão ao banco, embedding, etc.)
+│   │   ├── __init__.py
+│   │   ├── db.py            # Conexão e queries com PostgreSQL/PGVector
+│   │   ├── embeddings.py    # Funções para gerar embeddings
+│   │   └── prompt_helpers.py  # Funções auxiliares para prompts no LLM
+│   └── tests/               # Testes unitários e de integração
+│       ├── __init__.py
+│       └── test_api.py
+│
+├── data/                    # Dados estáticos e arquivos de apoio
+│   ├── markdowns/           # Arquivos Markdown com devolutivas e/ou materiais
+│   │   ├── devolutivas/
+│   │   │   ├── comunicacao.md
+│   │   │   └── lideranca.md
+│   │   └── materiais/       # Arquivos Markdown dos materiais de recomendação
+│   │       ├── material1.md
+│   │       └── material2.md
+│   └── sample_data/         # Dados de exemplo para testes
+│       ├── questionario.json
+│       └── respostas.json
+│
+└── docs/                    # Documentação mais detalhada (arquitetura, API, etc.)
+    └── design.md
