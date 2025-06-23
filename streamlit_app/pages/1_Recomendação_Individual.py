@@ -14,7 +14,7 @@ from src.recommendation import get_recommendations
 
 # --- CABEÇALHO ---
 exibir_cabecalho()
-st.markdown("### Recomendação Individual")
+st.markdown("### Devolutiva por subdimensão")
 
 # --- SELEÇÃO DO MOTOR DE RECOMENDAÇÃO ---
 st.markdown("#### 1. Escolha o Motor de Recomendação")

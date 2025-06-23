@@ -14,7 +14,7 @@ df_rubricas = carregar_rubricas()
 modelo_ativo = st.session_state.get('modelo_ativo', "Modelo Avançado (v2, Re-ranking)")
 
 # --- INTERFACE DA PÁGINA ---
-st.header("Devolutiva Geral da Dimensão")
+st.header("Devolutiva por Dimensão")
 
 st.sidebar.markdown("### 🤖 Configurações de IA (Síntese)")
 modelo_gpt_selecionado = st.sidebar.selectbox(
