@@ -1,7 +1,23 @@
-streamlit
-pandas
-numpy
+# Arquivo: requirements.txt
+
+# Core da Aplicação e Dados
 faiss-cpu
-sentence-transformers
+numpy
 openai
+openpyxl
+pandas
+
+# Machine Learning e Embeddings
 einops
+sentence-transformers
+torch
+transformers
+
+# MLOps e Visualização
+matplotlib
+mlflow
+seaborn
+umap-learn
+
+# Interface Web
+streamlit
