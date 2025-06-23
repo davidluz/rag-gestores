@@ -5,26 +5,24 @@ import pickle
 import re
 import time
 from pathlib import Path
-from typing import Dict, Any, Optional
-
+import pandas as pd
+import numpy as np
 import faiss
 import mlflow
-import numpy as np
-import pandas as pd
 import torch
 from sentence_transformers import SentenceTransformer
 import matplotlib.pyplot as plt
 import seaborn as sns
 
 # --- 1. CONFIGURAÇÃO DO EXPERIMENTO ---
-MODELO_VERSAO = "v1_base" # Mude a versão a cada novo experimento
+MODELO_VERSAO = "v6_processamento_em_memoria" # Nova versão para o log
 EMBEDDING_MODEL = "nomic-ai/nomic-embed-text-v1.5"
-BATCH_SIZE = 16
+BATCH_SIZE = 32
+CHUNK_SIZE = 1000 # Continuamos usando para fatiar o DataFrame
 
 # --- 2. SETUP DE AMBIENTE E CAMINHOS ---
-PROJECT_ROOT = Path(__file__).parent.parent
+PROJECT_ROOT = Path.cwd()
 caminho_xlsx_input = PROJECT_ROOT / "data_source" / "Base_de_ODAS_1606.xlsx"
-caminho_devolutivas_input = PROJECT_ROOT / "streamlit_app" / "data" / "devolutivas.csv"
 pasta_output_models = PROJECT_ROOT / "streamlit_app" / "models" / MODELO_VERSAO
 os.makedirs(pasta_output_models, exist_ok=True)
 caminho_metadados_output = pasta_output_models / "metadados_odas.pkl"
@@ -39,48 +37,71 @@ def preparar_texto_oda_enriquecido(row: pd.Series) -> str:
     partes = [header, f"Título: {row.get('Título', '')}", f"Resumo completo: {row.get('Resumo completo', '')}", f"Temas: {row.get('Temas', '')}"]
     return "\n".join([p for p in partes if pd.notnull(p) and str(p).strip() and 'nan' not in str(p).lower()])
 
-def gerar_embedding(modelo: SentenceTransformer, textos: list) -> np.ndarray:
-    embeddings = modelo.encode(textos, batch_size=BATCH_SIZE, show_progress_bar=True, device=device, trust_remote_code=True)
-    return embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
-
-# --- 4. PIPELINE PRINCIPAL ---
+# --- 4. PIPELINE PRINCIPAL COM PROCESSAMENTO EM LOTES ---
 def main():
+    """Função principal que orquestra o pipeline de treinamento em lotes."""
+    
     mlflow.set_experiment("Recomendacao_Mori_Pipeline")
     with mlflow.start_run(run_name=f"Treino_Versao_{MODELO_VERSAO}") as run:
         print(f"\n🚀 Iniciando Run: {MODELO_VERSAO} (ID: {run.info.run_id})")
-        mlflow.log_params({"versao_modelo": MODELO_VERSAO, "embedding_model": EMBEDDING_MODEL, "batch_size": BATCH_SIZE})
+        mlflow.log_params({"versao_modelo": MODELO_VERSAO, "embedding_model": EMBEDDING_MODEL, "chunk_size": CHUNK_SIZE})
 
-        print("   - Carregando e processando dados...")
+        # --- AQUI ESTÁ A MUDANÇA ---
+        # Carregamos o DataFrame inteiro de uma vez para a memória.
+        print(f"   - Carregando dados de {caminho_xlsx_input} para a memória...")
         df_odas = pd.read_excel(caminho_xlsx_input)
         df_odas.dropna(subset=["Resumo completo", "Temas", "Dimensões", "Tipo"], inplace=True)
+        print(f"   - {len(df_odas)} documentos carregados e prontos para processar.")
+
+        # O resto do pré-processamento acontece no DataFrame completo
         df_odas["texto_completo"] = df_odas.apply(preparar_texto_oda_enriquecido, axis=1)
 
-        print("   - Gerando gráficos de análise...")
-        sns.set_theme(style="whitegrid")
-        fig_suporte, ax1 = plt.subplots(figsize=(10, 8)); df_odas['Suporte'].value_counts().head(15).sort_values().plot(kind='barh', ax=ax1); ax1.set_title('Top 15 Tipos de Suporte'); mlflow.log_figure(fig_suporte, "analise_exploratoria/1_distribuicao_suporte.png")
-        if 'Rubrica_IA' in df_odas.columns:
-            fig_rubrica, ax2 = plt.subplots(figsize=(10, 8)); df_odas['Rubrica_IA'].value_counts().plot(kind='pie', autopct='%1.1f%%'); ax2.set_title('Distribuição por Rubrica_IA'); ax2.set_ylabel(''); mlflow.log_figure(fig_rubrica, "analise_exploratoria/2_distribuicao_rubrica_ia.png")
-        plt.close('all')
-
-        print(f"   - Gerando embeddings com '{EMBEDDING_MODEL}'...")
+        # Carrega o modelo de embedding uma única vez
         modelo = SentenceTransformer(EMBEDDING_MODEL, device=device, trust_remote_code=True)
-        embeddings = gerar_embedding(modelo, df_odas["texto_completo"].tolist())
-        
-        dimensao = embeddings.shape[1]
-        index = faiss.IndexFlatIP(dimensao); index.add(embeddings.astype("float32"))
-        
-        print(f"   - Salvando artefatos na pasta: {pasta_output_models}...")
-        metadados = df_odas[[c for c in df_odas.columns if c != 'texto_completo']].reset_index(drop=True)
-        with open(caminho_metadados_output, "wb") as f: pickle.dump(metadados, f)
-        faiss.write_index(index, str(caminho_index_output))
-        mlflow.log_artifacts(str(pasta_output_models), artifact_path="model_artifacts")
+        dimensao = modelo.get_sentence_embedding_dimension()
+        mlflow.log_param("device", device)
 
+        # Inicializa um índice FAISS vazio e uma lista para os metadados
+        index = faiss.IndexFlatIP(dimensao)
+        lista_metadados = []
+
+        print("\nIniciando processamento de embeddings em lotes (chunks)...")
+        # Agora, fatiamos o DataFrame que já está na memória
+        for i in range(0, len(df_odas), CHUNK_SIZE):
+            chunk_df = df_odas.iloc[i:i + CHUNK_SIZE]
+            print(f"--- Processando Lote {i // CHUNK_SIZE + 1} (linhas {i} a {i + CHUNK_SIZE}) ---")
+
+            if chunk_df.empty: continue
+
+            # Gera embeddings apenas para o lote atual
+            print(f"   - Gerando embeddings para {len(chunk_df)} documentos...")
+            embeddings = modelo.encode(chunk_df["texto_completo"].tolist(), batch_size=BATCH_SIZE, show_progress_bar=True)
+            embeddings_norm = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
+            
+            # Adiciona os embeddings do lote ao índice principal
+            index.add(embeddings_norm.astype("float32"))
+            
+            # Guarda os metadados do lote (sem a coluna de texto completo)
+            colunas_para_salvar = [col for col in chunk_df.columns if col != 'texto_completo']
+            lista_metadados.append(chunk_df[colunas_para_salvar])
+
+        print("\nProcessamento de lotes finalizado.")
+        
+        # Concatena todos os metadados em um único DataFrame
+        metadados_finais = pd.concat(lista_metadados, ignore_index=True).reset_index(drop=True)
+        
+        # Salvando os artefatos finais
+        print(f"Salvando artefatos em {pasta_output_models}...")
+        with open(caminho_metadados_output, "wb") as f: pickle.dump(metadados_finais, f)
+        faiss.write_index(index, str(caminho_index_output))
+        
+        # Log no MLflow
+        mlflow.log_artifacts(str(pasta_output_models), artifact_path="model_artifacts")
         mlflow.log_metric("num_documentos_indexados", index.ntotal)
         mlflow.log_metric("dimensao_vetores", dimensao)
-
+        
         print("\n" + "="*50)
         print(f"✅ Experimento {MODELO_VERSAO} finalizado com sucesso!")
-        print("   Para visualizar, rode 'mlflow ui' no terminal da pasta raiz do projeto.")
         print("="*50)
 
 if __name__ == "__main__":
