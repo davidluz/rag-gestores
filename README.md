@@ -41,7 +41,7 @@ O projeto tem dois fluxos de trabalho principais: **1. Treinamento/Geração de 
 
 ```bash
 # Clone o repositório e entre na pasta raiz
-git clone [URL_DO_SEU_REPOSITORIO]
+git clone https://github.com/davidluz/rag-gestores.git
 cd RAG-GESTORES
 
 # (Opcional, mas recomendado) Ative o Git LFS para arquivos grandes
