@@ -1,0 +1,14 @@
+artifact_uri: file:///workspaces/rag-gestores/mlruns/273862275952148151/61813685821e41be9cc11c6f9f9f28ff/artifacts
+end_time: null
+entry_point_name: ''
+experiment_id: '273862275952148151'
+lifecycle_stage: active
+run_id: 61813685821e41be9cc11c6f9f9f28ff
+run_name: Treino_Versao_v1_base
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1750689470846
+status: 1
+tags: []
+user_id: codespace

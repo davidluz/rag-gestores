@@ -1,0 +1,50 @@
+# Arquivo .gitignore
+
+# Ambientes Virtuais
+# Nunca versionar as bibliotecas instaladas no ambiente virtual.
+/venv/
+/env/
+/.env
+
+# Arquivos de Cache e compilados do Python
+# Gerados automaticamente pelo Python, não são código-fonte.
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Arquivos de IDEs e Editores
+.vscode/
+.idea/
+*.swp
+
+# Arquivos de Cache e Logs do Streamlit
+.streamlit/secrets.toml
+
+# Notebooks e seus checkpoints
+.ipynb_checkpoints/
+
+# Dependências do sistema operacional
+.DS_Store
+Thumbs.db
+
+# Arquivos de dados grandes ou sensíveis
+# É uma boa prática não versionar arquivos de dados muito grandes.
+# Descomente a linha abaixo se seu arquivo Excel for muito grande (>100MB).
+# data_source/*.xlsx
+
+# --- REGRAS ADICIONADAS PARA MLOPS ---
+
+# MLOps e Ferramentas de Experimento
+# A pasta mlruns é um banco de dados de resultados e NUNCA deve ser versionada.
+/mlruns/
+
+# Modelos e artefatos gerados
+# Os arquivos .faiss e .pkl são grandes e gerados pelo script de treinamento.
+# Eles devem ser gerenciados pelo Git LFS ou manualmente.
+# Esta regra ignora todo o conteúdo dentro da pasta 'models'.
+streamlit_app/models/*
+
+# Dica: Para manter a pasta 'models' vazia no repositório,
+# adicione um arquivo vazio chamado .gitkeep dentro dela e a linha abaixo.
+!streamlit_app/models/.gitkeep
