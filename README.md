@@ -54,3 +54,12 @@ source venv/bin/activate  # No Windows: venv\Scripts\activate
 
 # Instale todas as dependências
 pip install -r requirements.txt
+```
+
+### 2. Executando a API
+
+Após instalar as dependências, inicie o servidor FastAPI com:
+
+```bash
+uvicorn api.main:app
+```

@@ -2,7 +2,34 @@
 # Este módulo contém a lógica central do motor de recomendação,
 # orquestrando a busca, o re-ranking e o balanceamento.
 
-import streamlit as st
+try:
+    import streamlit as st  # type: ignore
+except Exception:  # pragma: no cover - fallback when Streamlit isn't available
+    import logging
+
+    class _DummyDecorator:
+        def __call__(self, func=None, **kwargs):
+            if func:
+                return func
+            return lambda f: f
+
+    class _DummyStreamlit:
+        cache_resource = _DummyDecorator()
+        cache_data = _DummyDecorator()
+
+        def info(self, msg):
+            logging.info(msg)
+
+        def warning(self, msg):
+            logging.warning(msg)
+
+        def error(self, msg):
+            logging.error(msg)
+
+        def stop(self):
+            raise RuntimeError("Streamlit stop called")
+
+    st = _DummyStreamlit()
 import pandas as pd
 import numpy as np
 import re

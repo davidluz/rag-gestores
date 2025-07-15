@@ -21,3 +21,5 @@ umap-learn
 
 # Interface Web
 streamlit
+fastapi
+uvicorn
