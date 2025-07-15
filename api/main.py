@@ -7,11 +7,6 @@ from typing import List, Dict
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-# Configure import path for reusable modules
-ROOT = Path(__file__).resolve().parent.parent
-SRC_PATH = ROOT / "streamlit_app"
-if str(SRC_PATH) not in sys.path:
-    sys.path.append(str(SRC_PATH))
 
 from src.utils import (
     carregar_modelo_st,

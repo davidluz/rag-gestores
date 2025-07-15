@@ -2,8 +2,7 @@
 # Este módulo contém todas as funções auxiliares para carregamento de dados,
 # processamento de texto e geração de componentes visuais.
 
-import logging
-from functools import lru_cache
+
 import pandas as pd
 import numpy as np
 import faiss

@@ -2,7 +2,7 @@
 # Este módulo contém a lógica central do motor de recomendação,
 # orquestrando a busca, o re-ranking e o balanceamento.
 
-import logging
+
 import pandas as pd
 import numpy as np
 import re

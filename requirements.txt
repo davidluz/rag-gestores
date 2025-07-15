@@ -20,5 +20,7 @@ seaborn
 umap-learn
 
 # Interface Web
+
+
 fastapi
 uvicorn
