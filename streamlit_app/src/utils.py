@@ -2,7 +2,8 @@
 # Este módulo contém todas as funções auxiliares para carregamento de dados,
 # processamento de texto e geração de componentes visuais.
 
-import streamlit as st
+import logging
+from functools import lru_cache
 import pandas as pd
 import numpy as np
 import faiss
@@ -19,22 +20,22 @@ APP_ROOT = Path(__file__).parent.parent
 
 # === FUNÇÕES DE CACHE COM CAMINHOS CORRIGIDOS ===
 
-@st.cache_resource
+@lru_cache(maxsize=1)
 def carregar_modelo_st() -> SentenceTransformer:
     """Carrega o modelo de embedding SentenceTransformer."""
     return SentenceTransformer("nomic-ai/nomic-embed-text-v1.5", trust_remote_code=True)
 
-@st.cache_resource
+@lru_cache(maxsize=None)
 def carregar_index(caminho_relativo: str) -> faiss.Index:
     """Carrega o índice FAISS a partir de um caminho relativo à raiz do app."""
     caminho_completo = APP_ROOT / caminho_relativo
     try:
         return faiss.read_index(str(caminho_completo))
     except Exception as e:
-        st.error(f"Erro ao carregar o índice FAISS de '{caminho_completo}': {e}")
-        st.stop()
+        logging.error("Erro ao carregar o índice FAISS de '%s': %s", caminho_completo, e)
+        raise
 
-@st.cache_data
+@lru_cache(maxsize=None)
 def carregar_metadados(caminho_relativo: str) -> pd.DataFrame:
     """Carrega o DataFrame de metadados a partir de um caminho relativo à raiz do app."""
     caminho_completo = APP_ROOT / caminho_relativo
@@ -42,10 +43,10 @@ def carregar_metadados(caminho_relativo: str) -> pd.DataFrame:
         with open(caminho_completo, "rb") as f:
             return pickle.load(f)
     except FileNotFoundError:
-        st.error(f"Arquivo de metadados não encontrado em '{caminho_completo}'. Verifique o caminho.")
-        st.stop()
+        logging.error("Arquivo de metadados não encontrado em '%s'.", caminho_completo)
+        raise
 
-@st.cache_data
+@lru_cache(maxsize=None)
 def carregar_devolutivas() -> pd.DataFrame:
     """Carrega o CSV com os textos das devolutivas."""
     caminho_completo = APP_ROOT / "data" / "devolutivas.csv"
@@ -53,10 +54,10 @@ def carregar_devolutivas() -> pd.DataFrame:
         df = pd.read_csv(caminho_completo, sep=";")
         return df.rename(columns={"Necessidaes formativas": "Necessidades formativas"})
     except FileNotFoundError:
-        st.error(f"Arquivo de devolutivas não encontrado em '{caminho_completo}'.")
-        st.stop()
+        logging.error("Arquivo de devolutivas não encontrado em '%s'.", caminho_completo)
+        raise
 
-@st.cache_data
+@lru_cache(maxsize=None)
 def carregar_rubricas() -> pd.DataFrame:
     """Carrega o CSV com as faixas de pontuação das rubricas."""
     caminho_completo = APP_ROOT / "data" / "rubricas.csv"
@@ -64,16 +65,11 @@ def carregar_rubricas() -> pd.DataFrame:
         df = pd.read_csv(caminho_completo, sep=";")
         return df
     except FileNotFoundError:
-        st.error(f"Arquivo de rubricas não encontrado em '{caminho_completo}'.")
-        st.stop()
+        logging.error("Arquivo de rubricas não encontrado em '%s'.", caminho_completo)
+        raise
 
 # === FUNÇÕES AUXILIARES DE LÓGICA E FORMATAÇÃO ===
 
-def exibir_cabecalho():
-    """Exibe o cabeçalho padronizado da página."""
-    st.title("Plataforma de Apoio à Gestão Pedagógica")
-    st.markdown("Ferramenta para geração de devolutivas e recomendação de materiais.")
-    st.markdown("---")
 
 def encontrar_rubrica(df_rubricas: pd.DataFrame, pontuacao: int, dimensao: str, subdimensao: str) -> Tuple[Optional[int], Optional[str], Optional[str]]:
     """Encontra a rubrica, nome e faixa de nível com base na pontuação do usuário."""
@@ -119,7 +115,11 @@ def gerar_texto_devolutiva_markdown(df_devolutivas: pd.DataFrame, df_rubricas: p
     """Gera o card completo da devolutiva em formato Markdown para exibição."""
     rubrica_numero, rubrica_nome, tipo_faixa = encontrar_rubrica(df_rubricas, pontuacao, dimensao, subdimensao)
     if rubrica_numero is None or tipo_faixa is None:
-        st.warning(f"Não foi encontrada uma rubrica ou faixa de nível correspondente para a pontuação {pontuacao} na subdimensão '{subdimensao}'.")
+        logging.warning(
+            "Não foi encontrada rubrica ou faixa para pontuação %s na subdimensão '%s'.",
+            pontuacao,
+            subdimensao,
+        )
         return None
 
     devolutiva = df_devolutivas[
@@ -129,7 +129,11 @@ def gerar_texto_devolutiva_markdown(df_devolutivas: pd.DataFrame, df_rubricas: p
         (df_devolutivas['Rubrica nome'] == f"{rubrica_nome} – Nível {tipo_faixa}")
     ]
     if devolutiva.empty:
-        st.warning(f"O texto da devolutiva não foi encontrado para a Rubrica {rubrica_numero} - Nível {tipo_faixa}.")
+        logging.warning(
+            "Texto da devolutiva não encontrado para a Rubrica %s - Nível %s.",
+            rubrica_numero,
+            tipo_faixa,
+        )
         return None
         
     item = devolutiva.iloc[0]
@@ -242,5 +246,5 @@ def sintetizar_devolutiva_com_ia(client: OpenAI, modelo_gpt: str, prompt: str, m
         )
         return response.choices[0].message.content
     except Exception as e:
-        st.error(f"Erro ao se comunicar com a API da OpenAI: {e}")
+        logging.error("Erro ao se comunicar com a API da OpenAI: %s", e)
         return None

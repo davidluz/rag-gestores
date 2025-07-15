@@ -1,6 +1,6 @@
 # 📘 Plataforma de Apoio à Gestão Pedagógica
 
-Este projeto é uma aplicação web desenvolvida com Streamlit, projetada para auxiliar gestores pedagógicos na análise de desempenho e na formação continuada de professores. A ferramenta oferece devolutivas personalizadas e recomenda materiais de estudo com base em rubricas de avaliação.
+Este projeto fornece uma API web construída com FastAPI para auxiliar gestores pedagógicos na análise de desempenho e na formação continuada de professores. A ferramenta oferece devolutivas personalizadas e recomenda materiais de estudo com base em rubricas de avaliação.
 
 ## ✨ Funcionalidades Principais
 
@@ -18,16 +18,15 @@ O projeto é organizado com uma estrutura modular para separar a preparação do
     -   `data_source/`: Contém os dados brutos e originais.
     -   `notebooks/`: Para exploração de dados e desenvolvimento interativo (Jupyter/Colab).
     -   `scripts/`: Contém os pipelines automatizáveis e finais (ex: `train_model.py`).
-    -   `streamlit_app/`: A aplicação web autocontida.
-        -   `models/`: Onde os modelos treinados (`.faiss`, `.pkl`) são colocados para serem usados pela aplicação.
-        -   `pages/`: As diferentes páginas do app Streamlit.
-        -   `src/`: Módulos de código reutilizável (`utils.py`, `recommendation.py`).
+    -   `streamlit_app/`: Código reutilizável e modelos pré-treinados.
+        -   `models/`: Modelos (`.faiss`, `.pkl`) utilizados pelas funções de recomendação.
+        -   `src/`: Módulos de lógica (`utils.py`, `recommendation.py`).
     -   `mlruns/`: Pasta criada pelo MLflow para armazenar os resultados dos experimentos (ignorada pelo Git).
     -   `README.md`, `requirements.txt`, `.gitignore`
 
 ## 🛠️ Tecnologias Utilizadas
 
-* **Interface Web:** Streamlit
+* **API:** FastAPI
 * **Manipulação de Dados:** Pandas, NumPy
 * **IA & Busca Semântica:** Sentence-Transformers, FAISS, PyTorch
 * **MLOps:** MLflow
@@ -54,3 +53,12 @@ source venv/bin/activate  # No Windows: venv\Scripts\activate
 
 # Instale todas as dependências
 pip install -r requirements.txt
+```
+
+### 2. Executando a API
+
+Após instalar as dependências, inicie o servidor FastAPI com:
+
+```bash
+uvicorn api.main:app
+```

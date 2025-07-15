@@ -2,7 +2,7 @@
 # Este módulo contém a lógica central do motor de recomendação,
 # orquestrando a busca, o re-ranking e o balanceamento.
 
-import streamlit as st
+import logging
 import pandas as pd
 import numpy as np
 import re
@@ -39,7 +39,7 @@ def get_recommendations(
     
     if modelo_ativo == "Modelo Avançado (v2, Re-ranking)":
         # --- LÓGICA AVANÇADA COM PREENCHIMENTO HÍBRIDO ---
-        st.info("💡 Aplicando lógica Avançada (Precisão + Preenchimento)...")
+        logging.info("Aplicando lógica Avançada (Precisão + Preenchimento)...")
 
         # 2a. Camada de Precisão: Filtra e Re-rankeia os melhores
         rubrica_numero, rubrica_nome, _ = encontrar_rubrica(df_rubricas, pontuacao, dimensao, subdimensao)
@@ -66,7 +66,7 @@ def get_recommendations(
                 resultados_precisos.rename(columns={'score_final': 'distância'}, inplace=True)
 
         # 2b. Lógica de Preenchimento Híbrido
-        st.info("Balanceando os tipos de materiais (Precisão + Preenchimento)...")
+        logging.info("Balanceando os tipos de materiais (Precisão + Preenchimento)...")
         
         categorias_regex = {
             "interativos": r"jogo|painel",
@@ -111,7 +111,7 @@ def get_recommendations(
 
     else:
         # --- LÓGICA SIMPLES (PARA MODELO INTERMEDIÁRIO E ANTIGO) ---
-        st.info(f"ℹ️ Aplicando lógica de Busca Simples para o {modelo_ativo}...")
+        logging.info("Aplicando lógica de Busca Simples para o %s...", modelo_ativo)
         
         # A lógica de balanceamento otimizada é aplicada diretamente nos resultados da busca ampla
         condicoes = [
