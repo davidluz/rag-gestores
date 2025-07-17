@@ -1,0 +1,30 @@
+# --- Python / FastAPI ---
+__pycache__/
+*.py[cod]
+*.pyd
+*.sqlite3
+env/
+.venv/
+
+# Arquivos grandes / binários
+*.pkl
+*.pt
+*.h5
+*.dll
+*.lib
+*.so
+*.exe
+
+# IDEs
+.vscode/
+.idea/
+
+# ambientes virtuais
+.venv/
+env/
+
+# caches
+__pycache__/
+
+test/
+
