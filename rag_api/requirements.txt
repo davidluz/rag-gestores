@@ -6,6 +6,9 @@ numpy
 faiss-cpu          # se usar GPU, troque para faiss-gpu
 sentence-transformers
 scikit-learn       # (dependência transitiva comum)
+pydantic-settings>=2.0
 
 
 
+
+einops==0.8.1
