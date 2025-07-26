@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+pydantic>=2.0    # v2+
+pandas
+numpy
+faiss-cpu          # se usar GPU, troque para faiss-gpu
+sentence-transformers
+scikit-learn       # (dependência transitiva comum)
+
+
+
