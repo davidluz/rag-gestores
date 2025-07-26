@@ -1,1 +1,0 @@
-(.venv) C:\wamp64\www\rag-limpa>python -m uvicorn rag_api.app.main:app --reload --port 8000
