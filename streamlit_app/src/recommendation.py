@@ -134,3 +134,49 @@ def get_recommendations(
         interativos = resultados_balanceados[resultados_balanceados['categoria'] == 'interativos']
         
         return artigos, videos, audios, visuais, interativos
+
+def get_recommendations_stellav5(
+    modelo_st,
+    index_stella,
+    df_odas_stella: pd.DataFrame,
+    pontuacao: int,
+    dimensao: str,
+    subdimensao: str,
+    texto_rico: str,
+    modelo_ativo: str
+) -> Tuple[pd.DataFrame, ...]:
+    """
+    Gera recomendações usando o índice StellaV5 (sem re-ranking por rubrica).
+    Essa função usa apenas busca vetorial simples + balanceamento por tipo.
+    """
+    st.info("🧠 Gerando recomendações via StellaV5 (modelo puro vetorial)...")
+
+    # === Busca vetorial no índice StellaV5 ===
+    embedding_query = gerar_embedding_para_rag(modelo_st, texto_rico)
+    k_busca = 500
+    distancias, indices = index_stella.search(embedding_query.astype("float32"), k=k_busca)
+
+    resultados_gerais = df_odas_stella.iloc[indices[0]].copy()
+    resultados_gerais["distância"] = distancias[0]
+
+    # === Balanceamento simples por tipo de mídia ===
+    condicoes = [
+        resultados_gerais['Suporte'].str.contains(r"jogo|painel", case=False, na=False),
+        resultados_gerais['Suporte'].str.contains(r"infográfico|mapa|tabela|gráfico|slide", case=False, na=False),
+        resultados_gerais['Suporte'].str.contains(r"vídeo|video|curso|aula|aula gravada|palestra|webinário|animação|exposição", case=False, na=False),
+        resultados_gerais['Suporte'].str.contains(r"áudio|audio|podcast|rádio|entrevista", case=False, na=False),
+        resultados_gerais['Suporte'].str.contains(r"texto|artigo|livro|relatório|resenha|plano de aula|documento institucional|manual|guia|tutorial|documento oficial|documento técnico|cartilha|blog|apostila|coletânea|recomendação", case=False, na=False)
+    ]
+    categorias = ["interativos", "visuais", "videos", "audios", "artigos"]
+    resultados_gerais['categoria'] = np.select(condicoes, categorias, default='outros')
+    
+    resultados_categorizados = resultados_gerais[resultados_gerais['categoria'] != 'outros']
+    resultados_balanceados = resultados_categorizados.groupby('categoria').head(10)
+    
+    artigos = resultados_balanceados[resultados_balanceados['categoria'] == 'artigos']
+    videos = resultados_balanceados[resultados_balanceados['categoria'] == 'videos']
+    audios = resultados_balanceados[resultados_balanceados['categoria'] == 'audios']
+    visuais = resultados_balanceados[resultados_balanceados['categoria'] == 'visuais']
+    interativos = resultados_balanceados[resultados_balanceados['categoria'] == 'interativos']
+    
+    return artigos, videos, audios, visuais, interativos

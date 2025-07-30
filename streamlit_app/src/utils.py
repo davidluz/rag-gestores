@@ -57,6 +57,17 @@ def carregar_devolutivas() -> pd.DataFrame:
         st.stop()
 
 @st.cache_data
+def carregar_devolutivas_revisto() -> pd.DataFrame:
+    """Carrega o arquivo Excel com as devolutivas revisadas."""
+    caminho = APP_ROOT / "data" / "Devolutivas_revisto.xlsx"
+    try:
+        return pd.read_excel(caminho)
+    except FileNotFoundError:
+        st.error(f"Arquivo 'Devolutivas_revisto.xlsx' não encontrado em {caminho}.")
+        st.stop()
+
+
+@st.cache_data
 def carregar_rubricas() -> pd.DataFrame:
     """Carrega o CSV com as faixas de pontuação das rubricas."""
     caminho_completo = APP_ROOT / "data" / "rubricas.csv"
@@ -183,6 +194,59 @@ def gerar_texto_devolutiva_rico(df_devolutivas: pd.DataFrame, df_rubricas: pd.Da
     else:
         return f"Necessidades formativas:\n{item['Necessidades formativas']}".strip()
 
+def gerar_texto_padronizado_stellav5(
+    df_revisto: pd.DataFrame,
+    df_rubricas: pd.DataFrame,
+    pontuacao: int,
+    dimensao: str,
+    subdimensao: str
+) -> Optional[str]:
+    """
+    Gera o texto completo da devolutiva revisada para o modelo StellaV5.
+    Mantém o nome da função original para substituir sem quebrar referências.
+    """
+    rubrica_numero, rubrica_nome, tipo_faixa = encontrar_rubrica(
+        df_rubricas, pontuacao, dimensao, subdimensao
+    )
+    if rubrica_numero is None or tipo_faixa is None:
+        return None
+
+    filtro = df_revisto[
+        (df_revisto["Dimensão"] == dimensao) &
+        (df_revisto["Subdimensão"] == subdimensao) &
+        (df_revisto["Rubrica numero"] == rubrica_numero) &
+        (df_revisto["Rubrica nome"].str.lower().str.contains(tipo_faixa.strip().lower()))
+    ]
+
+    if filtro.empty:
+        return None
+
+    item = filtro.iloc[0]
+
+    texto = f"""
+📄 Devolutiva Personalizada  
+🔢 Pontuação: {pontuacao}  
+📂 Dimensão: {dimensao}  
+📁 Subdimensão: {subdimensao}  
+🏷️ Rubrica: Rubrica {rubrica_numero} - {rubrica_nome}  
+📊 Nível: {tipo_faixa}  
+
+✅ Seus pontos fortes:
+
+{item['Pontos fortes']}
+
+📈 O que fazer para avançar:
+
+{item['O que fazer para avançar']}
+
+📚 Necessidades formativas:
+
+{item['Necessidades formativas']}
+""".strip()
+
+    return texto
+
+
 def gerar_embedding_para_rag(modelo_st: SentenceTransformer, texto: str) -> np.ndarray:
     """Gera e normaliza um embedding para um dado texto."""
     embedding = modelo_st.encode([texto])
@@ -244,3 +308,24 @@ def sintetizar_devolutiva_com_ia(client: OpenAI, modelo_gpt: str, prompt: str, m
     except Exception as e:
         st.error(f"Erro ao se comunicar com a API da OpenAI: {e}")
         return None
+
+def gerar_payload_para_frontend(texto_markdown: str, lista_materiais: list[dict]) -> dict:
+    """
+    Gera um dicionário com o markdown da devolutiva e a lista de recomendações formatadas para o app.
+    
+    Args:
+        texto_markdown (str): Texto da devolutiva (em markdown).
+        lista_materiais (list): Lista de dicionários, cada um com os campos:
+            - title
+            - description
+            - type
+            - url
+            - workload (opcional)
+    
+    Returns:
+        dict: Estrutura com "content_md" e "recommendations".
+    """
+    return {
+        "content_md": texto_markdown,
+        "recommendations": lista_materiais
+    }
