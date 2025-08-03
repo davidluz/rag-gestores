@@ -2,7 +2,9 @@
 rag_service.py
 Camada de serviço: carrega modelos/pickles uma única vez e expõe funções
 que são chamadas pelo endpoint FastAPI.
+
 """
+
 from __future__ import annotations
 
 import pickle
@@ -19,7 +21,23 @@ from .settings import settings
 from .models import ODAItem
 
 # --------------------------------------------------------------------------- #
-#  1.  Exceção própria para erros de validação                                #
+#  0.  Parâmetros compartilhados com o Streamlit                              #
+# --------------------------------------------------------------------------- #
+# Número máximo de itens devolvidos por categoria – deve bater com head(10)
+_HEAD_PER_CAT = 10
+
+# Regex/ordem das categorias
+_CATEGORIAS_REGEX = {
+    "interativos": r"jogo|painel",
+    "visuais": r"infográfico|mapa|tabela|gráfico|slide",
+    "videos": r"vídeo|video|curso|aula|aula gravada|palestra|webinário|animação|exposição",
+    "audios": r"áudio|audio|podcast|rádio|entrevista",
+    "artigos": r"texto|artigo|livro|relatório|resenha|plano de aula|documento institucional|manual|guia|tutorial|documento oficial|documento técnico|cartilha|blog|apostila|coletânea|recomendação",
+}
+_CATS_VALIDAS = set(_CATEGORIAS_REGEX.keys())
+
+# --------------------------------------------------------------------------- #
+#  1.  Exceção própria                                                        #
 # --------------------------------------------------------------------------- #
 class RagValidationError(Exception):
     """Erro levantado quando o formato de entrada não corresponde ao esperado."""
@@ -40,7 +58,7 @@ class RagValidationError(Exception):
 
 
 # --------------------------------------------------------------------------- #
-#  2.  Recursos carregados em cache                                           #
+#  2.  Recursos em cache                                                      #
 # --------------------------------------------------------------------------- #
 MODEL: Optional[SentenceTransformer] = None
 INDEX: Optional[faiss.Index] = None
@@ -48,7 +66,6 @@ DF_ODAS: Optional[pd.DataFrame] = None
 DF_DEV: Optional[pd.DataFrame] = None
 DF_RUB: Optional[pd.DataFrame] = None
 
-# Lock para evitar condição de corrida em ambientes multi-thread / multi-worker
 _INIT_LOCK = threading.Lock()
 
 
@@ -70,36 +87,29 @@ def _load_csv(path: Path) -> pd.DataFrame:
 
 
 def init() -> None:
-    """Carrega modelos e datasets uma única vez (execução de startup)."""
+    """Carrega modelos e datasets uma única vez (startup)."""
     global MODEL, INDEX, DF_ODAS, DF_DEV, DF_RUB
-
-    # Garante que apenas um thread/processo execute o bloco de carregamento
     with _INIT_LOCK:
         if MODEL is not None:
-            return  # já carregado
+            return
 
         MODEL = _load_model()
-        INDEX = _load_index(settings.index_path)          # StellaV5 final
-        DF_ODAS = _load_pickle(settings.meta_odas_path)   # metadados com novas colunas
+        INDEX = _load_index(settings.index_path)          # models/odas_index_stellav5.faiss
+        DF_ODAS = _load_pickle(settings.meta_odas_path)   # models/metadados_odas_stellav5.pkl
         DF_DEV = _load_csv(settings.devolutivas_path)
         DF_RUB = _load_csv(settings.rubricas_path)
 
 
 # --------------------------------------------------------------------------- #
-#  3.  Helpers de validação de entrada                                        #
+#  3.  Validação de entrada                                                   #
 # --------------------------------------------------------------------------- #
-_CATS_VALIDAS = {"videos", "artigos", "audios", "visuais", "interativos"}
-
-
 def _validar_entrada(pontuacao: int, dimensao: str, subdimensao: str) -> None:
     if not isinstance(pontuacao, int):
         raise RagValidationError("pontuacao", "int", f"{pontuacao} ({type(pontuacao).__name__})")
     if pontuacao < 0:
         raise RagValidationError("pontuacao", ">= 0", str(pontuacao))
-
     if not isinstance(dimensao, str) or not dimensao.strip():
         raise RagValidationError("dimensao", "str não vazia", repr(dimensao))
-
     if not isinstance(subdimensao, str) or not subdimensao.strip():
         raise RagValidationError("subdimensao", "str não vazia", repr(subdimensao))
 
@@ -111,11 +121,7 @@ def _validar_preferencias(preferencias: Optional[List[str]]) -> None:
         raise RagValidationError("preferencias", "lista[str]", repr(preferencias))
     invalidas = [p for p in preferencias if p not in _CATS_VALIDAS]
     if invalidas:
-        raise RagValidationError(
-            "preferencias",
-            f"subconjunto de {_CATS_VALIDAS}",
-            f"{invalidas}",
-        )
+        raise RagValidationError("preferencias", f"subconjunto de {_CATS_VALIDAS}", f"{invalidas}")
 
 
 # --------------------------------------------------------------------------- #
@@ -137,9 +143,7 @@ def _encontrar_rubrica(
         return None, None, None
     nro = int(cand.iloc[0]["rubrica_numero"])
     nome = cand.iloc[0]["rubrica_nome"]
-    faixa = cand[
-        (cand["subfaixa_min"] <= pontuacao) & (cand["subfaixa_max"] >= pontuacao)
-    ]
+    faixa = cand[(cand["subfaixa_min"] <= pontuacao) & (cand["subfaixa_max"] >= pontuacao)]
     tipo = faixa.iloc[0]["tipo_faixa"] if not faixa.empty else None
     return nro, nome, tipo
 
@@ -192,13 +196,11 @@ def _gerar_devolutiva(
 def _gerar_embedding(modelo: SentenceTransformer, texto: str) -> np.ndarray:
     emb = modelo.encode([texto])
     norm = np.linalg.norm(emb, axis=1, keepdims=True)
-    norm[norm == 0] = 1  # evita divisão por zero
-    embn = emb / norm
-    return embn.astype("float32")
+    norm[norm == 0] = 1
+    return (emb / norm).astype("float32")
 
 
 def _safe_str(val: Any, default: str = "") -> str:
-    """Converte NaN/None/vazio para string default; caso contrário, str(val)."""
     return default if pd.isna(val) or val == "" else str(val)
 
 
@@ -209,47 +211,38 @@ def _get_simple_recommendations(
     texto_q: str,
     preferencias: Optional[List[str]] = None,
 ) -> Dict[str, List[ODAItem]]:
-    # Busca vetorial
+    # --- Busca vetorial ---
     emb = _gerar_embedding(modelo, texto_q)
     dist, idxs = index.search(emb, 1000)
 
-    # Remove índices inválidos (-1)
     mask_valid = idxs[0] >= 0
     if not mask_valid.any():
         return {}
 
-    dist_valid = dist[0][mask_valid]
-    idx_valid = idxs[0][mask_valid]
+    df = df_odas.iloc[idxs[0][mask_valid]].copy()
+    df["distância"] = dist[0][mask_valid]
 
-    df = df_odas.iloc[idx_valid].copy()
-    df["distância"] = dist_valid
+    # --- Categorização ---
+    conds = [df["Suporte"].str.contains(rx, case=False, na=False) for rx in _CATEGORIAS_REGEX.values()]
+    df["categoria"] = np.select(conds, list(_CATEGORIAS_REGEX.keys()), default="outros")
+    top = df[df["categoria"] != "outros"].groupby("categoria").head(_HEAD_PER_CAT)
 
-    # Categorias
-    regs = {
-        "interativos": r"jogo|painel",
-        "visuais": r"infográfico|mapa|tabela|gráfico|slide",
-        "videos": r"vídeo|video|curso|aula|aula gravada|palestra|webinário|animação|exposição",
-        "audios": r"áudio|audio|podcast|rádio|entrevista",
-        "artigos": r"texto|artigo|livro|relatório|resenha|plano de aula|documento institucional|manual|guia|tutorial|documento oficial|documento técnico|cartilha|blog|apostila|coletânea|recomendação",
-    }
-    cats = list(regs.keys())
-    if preferencias:  # filtra/ordena conforme preferências
-        cats = [c for c in cats if c in preferencias]
-
-    conds = [df["Suporte"].str.contains(rx, case=False, na=False) for rx in regs.values()]
-    df["categoria"] = np.select(conds, list(regs.keys()), default="outros")
-    top = df[df["categoria"] != "outros"].groupby("categoria").head(10)
+    # --- Seleção conforme preferências (se enviadas) ---
+    cats_ordem = list(_CATEGORIAS_REGEX.keys())
+    if preferencias:
+        cats_ordem = [c for c in cats_ordem if c in preferencias]
 
     resultado: Dict[str, List[ODAItem]] = {}
-    for cat in cats:
+    for cat in cats_ordem:
         df_cat = top[top["categoria"] == cat]
         resultado[cat] = [
             ODAItem(
                 titulo=_safe_str(row["Título"]),
                 fonte=_safe_str(row.get("Fonte")),
-                resumo=_safe_str(row.get("Resumo")),     #  ← NOVO
+                resumo=_safe_str(row.get("Resumo")),
                 distancia=float(row["distância"]),
-                url=_safe_str(row.get("URL")),
+                # A coluna pode ser “URL” ou “Link fixo”, então usamos ambos como fallback
+                url=_safe_str(row.get("URL", row.get("Link fixo", ""))),
             )
             for _, row in df_cat.iterrows()
         ]
@@ -266,9 +259,11 @@ def recommend(
     preferencias: Optional[List[str]] = None,
 ) -> dict:
     """
-    Executa a pipeline completa.
-    • Em caso de erro de validação retorna {"erro": "..."}.
-    • Em caso de sucesso retorna dicionário serializável em JSON.
+    Executa a pipeline completa:
+    • Valida entrada
+    • Gera devolutiva enriquecida
+    • Busca vetorial e balanceamento (cota 10)
+    Retorna dicionário serializável em JSON.
     """
     try:
         _validar_entrada(pontuacao, dimensao, subdimensao)
@@ -279,12 +274,8 @@ def recommend(
     if MODEL is None:
         init()
 
-    texto_rico, nro, nome, tipo = _gerar_devolutiva(
-        DF_DEV, DF_RUB, pontuacao, dimensao, subdimensao
-    )
-    recs = _get_simple_recommendations(
-        MODEL, INDEX, DF_ODAS, texto_rico or "", preferencias
-    )
+    texto_rico, nro, nome, tipo = _gerar_devolutiva(DF_DEV, DF_RUB, pontuacao, dimensao, subdimensao)
+    recs = _get_simple_recommendations(MODEL, INDEX, DF_ODAS, texto_rico or "", preferencias)
 
     return {
         "pontuacao": pontuacao,
